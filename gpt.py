@@ -113,9 +113,11 @@ class GPT(nn.Module):
         logits = torch.matmul(h, self.token_embed.weight.t())
         
         if targets is not None:
+            if pad_token_id is None:
+                pad_token_id = -1
             loss = F.cross_entropy(
                 logits.view(-1, self.vocab_size),
-                targets.view(-1),
+                targets.contiguous().view(-1),
                 ignore_index=pad_token_id
             )
             return logits, loss
