@@ -1,0 +1,3 @@
+python main.py --mode train --config config.json
+
+python main.py --mode generate --config config.json --checkpoint best_model.pt

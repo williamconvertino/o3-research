@@ -1,0 +1,872 @@
+1. The Core Idea: Viewing the Forward Pass as In-Context Gradient Descent
+Latent Function & Problem Setup:
+We begin with a categorical regression formulation where we have data pairs 
+(
+𝑥
+𝑖
+,
+𝑦
+𝑖
+)
+(x 
+i
+​
+ ,y 
+i
+​
+ ) for 
+𝑖
+=
+1
+,
+…
+,
+𝑁
+i=1,…,N. Here:
+
+𝑥
+𝑖
+x 
+i
+​
+  are the covariates (learned positional encodings), treated as fixed during a forward pass.
+𝑦
+𝑖
+y 
+i
+​
+  are the target tokens.
+The latent function is defined as:
+
+𝑓
+(
+𝑥
+)
+=
+𝐴
+𝑥
+,
+f(x)=Ax,
+where 
+𝐴
+A is the weight matrix that we would typically update using gradient descent to maximize the likelihood of the observed tokens via a softmax classifier. In particular, we set the probability for class 
+𝑐
+c as:
+
+𝑝
+(
+𝑌
+=
+𝑐
+∣
+𝑓
+(
+𝑥
+)
+)
+=
+exp
+⁡
+(
+𝑊
+𝑐
+ 
+𝑓
+(
+𝑥
+)
+)
+∑
+𝑐
+′
+exp
+⁡
+(
+𝑊
+𝑐
+′
+ 
+𝑓
+(
+𝑥
+)
+)
+,
+p(Y=c∣f(x))= 
+∑ 
+c 
+′
+ 
+​
+ exp(W 
+c 
+′
+ 
+​
+ f(x))
+exp(W 
+c
+​
+ f(x))
+​
+ ,
+where each 
+𝑊
+𝑐
+W 
+c
+​
+  is a token embedding (fixed within a forward pass).
+
+Gradient Descent Update:
+The loss is given by:
+
+𝐿
+(
+𝐴
+)
+=
+1
+𝑁
+∑
+𝑖
+=
+1
+𝑁
+log
+⁡
+𝑝
+(
+𝑌
+=
+𝑦
+𝑖
+∣
+𝑓
+(
+𝑥
+𝑖
+)
+)
+.
+L(A)= 
+N
+1
+​
+  
+i=1
+∑
+N
+​
+ logp(Y=y 
+i
+​
+ ∣f(x 
+i
+​
+ )).
+Differentiating the loss with respect to 
+𝐴
+A (with 
+𝑓
+(
+𝑥
+𝑖
+)
+=
+𝐴
+𝑥
+𝑖
+f(x 
+i
+​
+ )=Ax 
+i
+​
+ ) gives us:
+
+∂
+𝐿
+∂
+𝐴
+=
+1
+𝑁
+∑
+𝑖
+=
+1
+𝑁
+[
+𝑊
+𝑦
+𝑖
+−
+𝐸
+𝑐
+∼
+𝑝
+(
+𝑐
+∣
+𝑓
+(
+𝑥
+𝑖
+)
+)
+[
+𝑊
+𝑐
+]
+]
+𝑥
+𝑖
+⊤
+.
+∂A
+∂L
+​
+ = 
+N
+1
+​
+  
+i=1
+∑
+N
+​
+ [W 
+y 
+i
+​
+ 
+​
+ −E 
+c∼p(c∣f(x 
+i
+​
+ ))
+​
+ [W 
+c
+​
+ ]]x 
+i
+⊤
+​
+ .
+With a gradient step 
+𝐴
+→
+𝐴
++
+𝛼
+ 
+∂
+𝐿
+∂
+𝐴
+A→A+α 
+∂A
+∂L
+​
+ , this corresponds to updating 
+𝐴
+A by adding:
+
+Δ
+𝐴
+ 
+𝑥
+𝑗
+=
+𝛼
+ 
+1
+𝑁
+∑
+𝑖
+=
+1
+𝑁
+[
+𝑊
+𝑦
+𝑖
+−
+𝐸
+𝑐
+∼
+𝑝
+(
+𝑐
+∣
+𝑓
+(
+𝑥
+𝑖
+)
+)
+[
+𝑊
+𝑐
+]
+]
+(
+𝑥
+𝑖
+⊤
+𝑥
+𝑗
+)
+.
+ΔAx 
+j
+​
+ =α 
+N
+1
+​
+  
+i=1
+∑
+N
+​
+ [W 
+y 
+i
+​
+ 
+​
+ −E 
+c∼p(c∣f(x 
+i
+​
+ ))
+​
+ [W 
+c
+​
+ ]](x 
+i
+⊤
+​
+ x 
+j
+​
+ ).
+The inner product 
+𝑥
+𝑖
+⊤
+𝑥
+𝑗
+x 
+i
+⊤
+​
+ x 
+j
+​
+  acts as a kernel measuring the similarity between positions.
+
+Manifesting the Update in the Function Output:
+Instead of explicitly updating a parameter matrix 
+𝐴
+A, we “manifest” the gradient descent update in the function output:
+
+Start with 
+𝐴
+0
+=
+0
+A 
+0
+​
+ =0 so that 
+𝑓
+0
+(
+𝑥
+)
+=
+0
+f 
+0
+​
+ (x)=0.
+Compute the first update:
+𝑓
+1
+(
+𝑥
+𝑗
+)
+=
+Δ
+𝐴
+0
+ 
+𝑥
+𝑗
+=
+𝛼
+ 
+1
+𝑁
+∑
+𝑖
+=
+1
+𝑁
+[
+𝑊
+𝑦
+𝑖
+−
+𝐸
+𝑐
+[
+𝑊
+𝑐
+]
+𝑓
+0
+(
+𝑥
+𝑖
+)
+]
+(
+𝑥
+𝑖
+⊤
+𝑥
+𝑗
+)
+.
+f 
+1
+​
+ (x 
+j
+​
+ )=ΔA 
+0
+​
+ x 
+j
+​
+ =α 
+N
+1
+​
+  
+i=1
+∑
+N
+​
+ [W 
+y 
+i
+​
+ 
+​
+ −E 
+c
+​
+ [W 
+c
+​
+ ] 
+f 
+0
+​
+ (x 
+i
+​
+ )
+​
+ ](x 
+i
+⊤
+​
+ x 
+j
+​
+ ).
+For subsequent layers, the output is accumulated:
+𝑓
+𝑘
++
+1
+(
+𝑥
+𝑗
+)
+=
+𝑓
+𝑘
+(
+𝑥
+𝑗
+)
++
+Δ
+𝐴
+𝑘
+ 
+𝑥
+𝑗
+,
+f 
+k+1
+​
+ (x 
+j
+​
+ )=f 
+k
+​
+ (x 
+j
+​
+ )+ΔA 
+k
+​
+ x 
+j
+​
+ ,
+so that after 
+𝐾
+K layers,
+𝑓
+𝐾
+(
+𝑥
+𝑗
+)
+=
+∑
+𝑘
+=
+0
+𝐾
+−
+1
+Δ
+𝐴
+𝑘
+ 
+𝑥
+𝑗
+.
+f 
+K
+​
+ (x 
+j
+​
+ )= 
+k=0
+∑
+K−1
+​
+ ΔA 
+k
+​
+ x 
+j
+​
+ .
+This process effectively “performs” gradient descent over the forward pass without maintaining an explicit 
+𝐴
+A at every step.
+
+2. Connection to the Transformer Architecture
+Attention Mechanism Analogy:
+
+The similarity measure 
+𝑥
+𝑖
+⊤
+𝑥
+𝑗
+x 
+i
+⊤
+​
+ x 
+j
+​
+  is analogous to the dot product of queries and keys in attention.
+The term 
+[
+𝑊
+𝑦
+𝑖
+−
+𝐸
+𝑐
+[
+𝑊
+𝑐
+]
+𝑓
+(
+𝑥
+𝑖
+)
+]
+[W 
+y 
+i
+​
+ 
+​
+ −E 
+c
+​
+ [W 
+c
+​
+ ] 
+f(x 
+i
+​
+ )
+​
+ ] serves as an error signal, which in this formulation takes the role of the “value” vector.
+The constants 
+𝛼
+α and 
+1
+/
+𝑁
+1/N can be absorbed into a final projection matrix 
+𝑊
+𝑜
+W 
+o
+​
+ , paralleling how transformers use a learned projection after attention.
+Generalizing with Kernels:
+Instead of the linear inner product, we can generalize:
+
+𝑓
+(
+𝑥
+)
+=
+𝐴
+ 
+𝜓
+(
+𝑥
+)
+,
+f(x)=Aψ(x),
+with a kernel defined as:
+
+𝑘
+(
+𝑥
+𝑖
+,
+𝑥
+𝑗
+)
+=
+𝜓
+(
+𝑥
+𝑖
+)
+⊤
+𝜓
+(
+𝑥
+𝑗
+)
+.
+k(x 
+i
+​
+ ,x 
+j
+​
+ )=ψ(x 
+i
+​
+ ) 
+⊤
+ ψ(x 
+j
+​
+ ).
+This opens up the possibility of using Mercer kernels (or approximations thereof) or even the softmax kernel as in standard transformers. The softmax can be seen as a non-symmetric alternative that relaxes the requirement of symmetry in a Mercer kernel.
+
+Multiple Heads:
+We extend the model to multiple heads:
+
+𝑓
+(
+𝑥
+)
+=
+∑
+ℎ
+=
+1
+𝐻
+𝐴
+ℎ
+ 
+𝜓
+ℎ
+(
+𝑥
+)
+,
+f(x)= 
+h=1
+∑
+H
+​
+ A 
+h
+​
+ ψ 
+h
+​
+ (x),
+where each head uses its own transformation (via matrices analogous to 
+𝑊
+𝑞
+W 
+q
+​
+  and 
+𝑊
+𝑘
+W 
+k
+​
+ ) to compute a kernel:
+
+𝑘
+ℎ
+(
+𝑥
+𝑖
+,
+𝑥
+𝑗
+)
+=
+𝑘
+(
+𝑊
+ℎ
+𝑥
+𝑖
+,
+𝑊
+ℎ
+𝑥
+𝑗
+)
+.
+k 
+h
+​
+ (x 
+i
+​
+ ,x 
+j
+​
+ )=k(W 
+h
+​
+ x 
+i
+​
+ ,W 
+h
+​
+ x 
+j
+​
+ ).
+Each head computes its own update 
+Δ
+𝐴
+ℎ
+ 
+𝑥
+𝑗
+ΔA 
+h
+​
+ x 
+j
+​
+ , and these are then aggregated (for example, summed or linearly projected by 
+𝑊
+𝑜
+W 
+o
+​
+ )—mirroring multi-head attention.
+
+Skip Connections & Layer Accumulation:
+To accumulate updates across layers (each representing a gradient descent step), we use skip connections:
+
+The initial skip is zero since 
+𝑓
+0
+(
+𝑥
+)
+=
+0
+f 
+0
+​
+ (x)=0.
+Each subsequent layer adds its delta update:
+𝑓
+𝑘
++
+1
+(
+𝑥
+)
+=
+𝑓
+𝑘
+(
+𝑥
+)
++
+Δ
+𝐴
+𝑘
+ 
+𝑥
+.
+f 
+k+1
+​
+ (x)=f 
+k
+​
+ (x)+ΔA 
+k
+​
+ x.
+This is analogous to the residual connections in transformers, ensuring that each layer’s contribution is preserved in the final output.
+
