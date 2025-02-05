@@ -2,11 +2,11 @@
   "model": {
     "vocab_size": 50257,
     "d_model": 512,
-    "num_layers": 2,
-    "alpha": 0.1,
-    "max_seq_len": 128,
-    "num_heads": 8,
-    "dropout": 0.1
+    "max_seq_len": 256,
+    "n_layers": 2,
+    "attn_fn": "softmax",
+    "attn_dropout": 0.1,
+    "gd_dropout": 0.1
   },
   "training": {
     "batch_size": 16,
