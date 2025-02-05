@@ -12,7 +12,7 @@ def generate_text_temperature(model, tokenizer, prompt, max_length=50, temperatu
             input_ids = generated[:, -model.pos_embed.num_embeddings:]
         else:
             input_ids = generated
-        logits = model(input_ids)
+        logits, _ = model(input_ids)
         # Get logits for the last token and apply temperature scaling.
         next_token_logits = logits[:, -1, :] / temperature
         probabilities = F.softmax(next_token_logits, dim=-1)
@@ -34,7 +34,7 @@ def generate_text_beam(model, tokenizer, prompt, max_length=50, beam_width=3, de
                 seq_input = seq[:, -model.pos_embed.num_embeddings:]
             else:
                 seq_input = seq
-            logits = model(seq_input)
+            logits, _ = model(seq_input)
             next_token_logits = logits[:, -1, :]
             log_probs = F.log_softmax(next_token_logits, dim=-1)
             topk_log_probs, topk_indices = torch.topk(log_probs, beam_width, dim=-1)
