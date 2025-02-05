@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class GDModel(nn.Module):
+class GDTransformer(nn.Module):
     """
     Gradient Descent-based Language Model.
     

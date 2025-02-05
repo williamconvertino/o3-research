@@ -1,134 +1,105 @@
 # trainer.py
 import time
-import math
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
 
-# GPT-style initialization (no bias)
-def init_weights(module):
-    if isinstance(module, nn.Linear):
-        nn.init.xavier_uniform_(module.weight)
-    elif isinstance(module, nn.Embedding):
-        nn.init.normal_(module.weight, mean=0.0, std=0.02)
-
-class GDTransformer(nn.Module):
-    def __init__(self, config):
-        super(GDTransformer, self).__init__()
-        model_config = config["model"]
-        self.vocab_size = model_config["vocab_size"]
-        self.d_model = model_config["d_model"]
-        self.num_layers = model_config["num_layers"]
-        self.alpha = model_config["alpha"]
-        self.max_seq_len = model_config["max_seq_len"]
-        self.dropout_rate = model_config.get("dropout", 0.0)
-        
-        # Token embedding (and tied output projection)
-        self.token_embedding = nn.Embedding(self.vocab_size, self.d_model)
-        # Learned positional embeddings
-        self.pos_embedding = nn.Embedding(self.max_seq_len, self.d_model)
-        
-        self.dropout = nn.Dropout(self.dropout_rate)
-        self.apply(init_weights)
-        
-    def forward(self, input_ids):
-        """
-        input_ids: (batch_size, seq_len)
-        Returns logits: (batch_size, seq_len, vocab_size)
-        """
-        batch_size, seq_len = input_ids.size()
-        device = input_ids.device
-        
-        # Get positional embeddings (same for all samples)
-        positions = torch.arange(0, seq_len, device=device).unsqueeze(0).expand(batch_size, seq_len)
-        pos_emb = self.pos_embedding(positions)  # (batch_size, seq_len, d_model)
-        pos_emb_single = pos_emb[0]  # (seq_len, d_model)
-        
-        # Compute a simple linear kernel between positions
-        K = torch.matmul(pos_emb_single, pos_emb_single.transpose(0, 1))  # (seq_len, seq_len)
-        
-        # Get target token embeddings (used in computing the error signal)
-        target_emb = self.token_embedding(input_ids)  # (batch_size, seq_len, d_model)
-        
-        # Start with f_0(x)=0
-        f = torch.zeros(batch_size, seq_len, self.d_model, device=device)
-        
-        # Each layer is interpreted as one gradient descent update step.
-        for _ in range(self.num_layers):
-            logits = torch.matmul(f, self.token_embedding.weight.transpose(0, 1))
-            probs = F.softmax(logits, dim=-1)
-            expected_emb = torch.matmul(probs, self.token_embedding.weight)
-            error = target_emb - expected_emb  # (batch_size, seq_len, d_model)
-            update = (self.alpha / seq_len) * torch.matmul(K, error)
-            update = self.dropout(update)
-            f = f + update
-        
-        final_logits = torch.matmul(f, self.token_embedding.weight.transpose(0, 1))
-        return final_logits
-
-class Trainer:
+class GDTrainer:
     def __init__(self, model, train_loader, val_loader, config, device):
-        self.model = model
+        """
+        Args:
+            model: An instance of the GDModel.
+            train_loader: A PyTorch DataLoader for the training dataset.
+            val_loader: A PyTorch DataLoader for the validation dataset.
+            config: A configuration dictionary (with keys "training" and "model").
+            device: torch.device (e.g., 'cuda' or 'cpu')
+        """
+        self.model = model.to(device)
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.config = config
         self.device = device
-        self.optimizer = AdamW(model.parameters(), 
-                               lr=config["training"]["learning_rate"],
-                               weight_decay=config["training"]["weight_decay"])
+
+        # Use AdamW (similar to GPT training)
+        self.optimizer = AdamW(
+            self.model.parameters(),
+            lr=config["training"]["learning_rate"],
+            weight_decay=config["training"]["weight_decay"]
+        )
         self.num_epochs = config["training"]["num_epochs"]
-        
+
     def evaluate(self, data_loader):
+        """
+        Evaluates the model on a given dataset.
+        Shifts the input tokens so that predictions are aligned with targets.
+        """
         self.model.eval()
         total_loss = 0.0
         total_batches = 0
         with torch.no_grad():
             for batch in data_loader:
+                # Expecting batch to have "input_ids" of shape (B, L)
                 input_ids = batch["input_ids"].to(self.device)
-                logits = self.model(input_ids)
-                loss = F.cross_entropy(logits.view(-1, logits.size(-1)), input_ids.view(-1))
+                # For language modeling, we shift the sequence:
+                # Use the first L-1 tokens as input and tokens 2...L as targets.
+                if input_ids.size(1) < 2:
+                    continue
+                x = input_ids[:, :-1]      # (B, L-1)
+                targets = input_ids[:, 1:]   # (B, L-1)
+
+                # Forward pass: our model returns logits and loss when targets is provided.
+                _, loss = self.model(x, targets=targets)
                 total_loss += loss.item()
                 total_batches += 1
         return total_loss / total_batches if total_batches > 0 else 0.0
-    
+
     def train(self):
-        best_val_loss = float("inf")
+        """
+        Runs the training loop for the specified number of epochs.
+        Displays training and validation loss as well as elapsed and remaining time.
+        Saves the best model (by validation loss) to "best_model.pt".
+        """
+        self.model.train()
         total_steps = self.num_epochs * len(self.train_loader)
-        current_step = 0
         start_time = time.time()
-        
-        for epoch in range(1, self.num_epochs+1):
-            self.model.train()
+        current_step = 0
+        best_val_loss = float("inf")
+
+        for epoch in range(1, self.num_epochs + 1):
             epoch_loss = 0.0
             for batch in self.train_loader:
+                # Expecting batch["input_ids"] to be of shape (B, L)
                 input_ids = batch["input_ids"].to(self.device)
+                if input_ids.size(1) < 2:
+                    continue  # Skip too-short sequences.
+                # Shift tokens: input x and targets as described.
+                x = input_ids[:, :-1]       # Input: tokens 0 ... L-2
+                targets = input_ids[:, 1:]    # Targets: tokens 1 ... L-1
+
                 self.optimizer.zero_grad()
-                logits = self.model(input_ids)
-                loss = F.cross_entropy(logits.view(-1, logits.size(-1)), input_ids.view(-1))
+                _, loss = self.model(x, targets=targets)
                 loss.backward()
-                # (Optional) gradient clipping can be added here.
                 self.optimizer.step()
-                
+
                 epoch_loss += loss.item()
                 current_step += 1
-                
-                # Calculate elapsed time and ETA
+
+                # Compute ETA
                 elapsed = time.time() - start_time
-                avg_time_per_step = elapsed / current_step
+                avg_step_time = elapsed / current_step
                 remaining_steps = total_steps - current_step
-                eta = remaining_steps * avg_time_per_step
+                eta = remaining_steps * avg_step_time
+
                 print(f"Epoch {epoch}, Step {current_step}/{total_steps}, Loss: {loss.item():.4f}, ETA: {eta/60:.2f} min", end="\r")
-            
+
             avg_train_loss = epoch_loss / len(self.train_loader)
             val_loss = self.evaluate(self.val_loader)
-            print(f"\nEpoch {epoch} completed. Train Loss: {avg_train_loss:.4f}, Val Loss: {val_loss:.4f}")
-            
-            # Save best model based on validation loss
+            print(f"\nEpoch {epoch} complete. Train Loss: {avg_train_loss:.4f}, Val Loss: {val_loss:.4f}")
+
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 torch.save(self.model.state_dict(), "best_model.pt")
-                print("Saved new best model with Val Loss:", best_val_loss)
-                
-        total_training_time = time.time() - start_time
-        print(f"Training complete in {total_training_time/60:.2f} minutes.")
+                print(f"Saved new best model with Val Loss: {best_val_loss:.4f}")
+
+        total_time = time.time() - start_time
+        print(f"Training complete in {total_time/60:.2f} minutes.")

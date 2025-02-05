@@ -2,7 +2,8 @@
 import argparse
 import json
 import torch
-from trainer import GDTransformer, Trainer
+from gd_transformer import GDTransformer
+from trainer import GDTrainer
 from dataset import get_tokenizer, get_dataloaders, prepare_datasets
 from generate import evaluate_generation
 
@@ -34,7 +35,7 @@ def main():
             config["model"]["max_seq_len"],
             config["training"]["batch_size"]
         )
-        trainer = Trainer(model, train_loader, val_loader, config, device)
+        trainer = GDTrainer(model, train_loader, val_loader, config, device)
         trainer.train()
     elif args.mode == "generate":
         # Load test dataset for evaluation.
