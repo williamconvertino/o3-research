@@ -214,7 +214,7 @@ class GDTransformer(nn.Module):
             # When training, use positions 1 ... S as predictions for tokens 0 ... S-1.
             logits = torch.matmul(f_norm[:, 1:S+1, :], self.token_embed.weight.t())  # (B, S, vocab_size)
             loss = F.cross_entropy(logits.view(-1, self.vocab_size),
-                                   targets.view(-1),
+                                   targets.contiguous().view(-1),
                                    ignore_index=pad_token_id)
             return logits, loss
         else:
