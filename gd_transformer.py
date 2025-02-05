@@ -211,6 +211,8 @@ class GDTransformer(nn.Module):
         f_norm = self.ln_out(f)
         
         if targets is not None:
+            if pad_token_id is None:
+                pad_token_id = -1
             # When training, use positions 1 ... S as predictions for tokens 0 ... S-1.
             logits = torch.matmul(f_norm[:, 1:S+1, :], self.token_embed.weight.t())  # (B, S, vocab_size)
             loss = F.cross_entropy(logits.view(-1, self.vocab_size),
