@@ -1,0 +1,18 @@
+{
+  "model": {
+    "vocab_size": 50257,
+    "d_model": 256,
+    "max_seq_len": 256,
+    "n_layers": 2,
+    "n_head": 1,
+    "attn_dropout": 0.1,
+    "ff_dropout": 0.1,
+    "ff_hidden_mult": 4
+  },
+  "training": {
+    "batch_size": 16,
+    "learning_rate": 0.001,
+    "weight_decay": 0.01,
+    "num_epochs": 10
+  }
+}

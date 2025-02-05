@@ -3,6 +3,7 @@ import argparse
 import json
 import torch
 from gd_transformer import GDTransformer
+from gpt import GPT
 from trainer import GDTrainer
 from dataset import get_tokenizer, get_dataloaders, prepare_datasets
 from generate import evaluate_generation
@@ -17,6 +18,7 @@ def main():
     parser.add_argument("--config", type=str, default="config.json", help="Path to configuration file")
     parser.add_argument("--mode", type=str, choices=["train", "generate"], required=True, help="Mode: train or generate")
     parser.add_argument("--checkpoint", type=str, default="best_model.pt", help="Path to model checkpoint")
+    parser.add_argument("--model", type=str, default="gd", choices=["gpt", "gd"], help="Model type: GPT or GD")
     args = parser.parse_args()
     
     config = load_config(args.config)
@@ -25,7 +27,13 @@ def main():
     # Initialize tokenizer.
     tokenizer = get_tokenizer()
     # Instantiate the model.
-    model = GDTransformer(config)
+    if args.model == "gpt":
+        model = GPT(config)
+    elif args.model == "gd":
+        model = GDTransformer(config)
+    else:
+        raise ValueError("Invalid model type. Must be 'gpt' or 'gd'.")
+    
     model.to(device)
     
     if args.mode == "train":
