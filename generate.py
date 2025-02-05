@@ -8,8 +8,8 @@ def generate_text_temperature(model, tokenizer, prompt, max_length=50, temperatu
     generated = input_ids
     for _ in range(max_length):
         # Ensure the sequence does not exceed the model's maximum sequence length.
-        if generated.size(1) > model.pos_embedding.num_embeddings:
-            input_ids = generated[:, -model.pos_embedding.num_embeddings:]
+        if generated.size(1) > model.pos_embed.num_embeddings:
+            input_ids = generated[:, -model.pos_embed.num_embeddings:]
         else:
             input_ids = generated
         logits = model(input_ids)
@@ -30,8 +30,8 @@ def generate_text_beam(model, tokenizer, prompt, max_length=50, beam_width=3, de
     for _ in range(max_length):
         new_beams = []
         for seq, score in beams:
-            if seq.size(1) > model.pos_embedding.num_embeddings:
-                seq_input = seq[:, -model.pos_embedding.num_embeddings:]
+            if seq.size(1) > model.pos_embed.num_embeddings:
+                seq_input = seq[:, -model.pos_embed.num_embeddings:]
             else:
                 seq_input = seq
             logits = model(seq_input)
